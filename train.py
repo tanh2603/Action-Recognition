@@ -1,6 +1,7 @@
 import torch
 import sys
 import numpy as np
+import torch.optim as optim
 import itertools
 from models import *
 from dataset import *
