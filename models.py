@@ -8,8 +8,6 @@ from torchvision.models import resnet152
 ##############################
 #         Encoder
 ##############################
-
-
 class Encoder(nn.Module):
     def __init__(self, latent_dim):
         super(Encoder, self).__init__()
@@ -22,36 +20,40 @@ class Encoder(nn.Module):
             nn.Dropout(p=0.5)
         )
 
-
     def forward(self, x):
         with torch.no_grad():
             x = self.feature_extractor(x)
         x = x.view(x.size(0), -1)
         return self.final(x)
 
-
 ##############################
 #           LSTM
 ##############################
-
-
 class LSTM(nn.Module):
     def __init__(self, latent_dim, num_layers, hidden_dim, bidirectional):
         super(LSTM, self).__init__()
+        self.bidirectional = bidirectional
+        self.num_directions = 2 if bidirectional else 1
+        self.num_layers = num_layers
+        self.hidden_dim = hidden_dim
         self.lstm = nn.LSTM(
             latent_dim, hidden_dim, num_layers,
             batch_first=True,
             bidirectional=bidirectional,
-            dropout=0.3 if num_layers > 1 else 0  # Dropout giữa các tầng LSTM
+            dropout=0.3 if num_layers > 1 else 0
         )
         self.hidden_state = None
 
+    def forward(self, x):
+        output, self.hidden_state = self.lstm(x, self.hidden_state)
+        return output
+
+    def reset_hidden_state(self):
+        self.hidden_state = None
 
 ##############################
 #      Attention Module
 ##############################
-
-
 class Attention(nn.Module):
     def __init__(self, latent_dim, hidden_dim, attention_dim):
         super(Attention, self).__init__()
@@ -62,23 +64,18 @@ class Attention(nn.Module):
     def forward(self, latent_repr, hidden_repr):
         if hidden_repr is None:
             hidden_repr = [
-                Variable(
-                    torch.zeros(latent_repr.size(0), 1, self.hidden_attention.in_features), requires_grad=False
-                ).float()
+                Variable(torch.zeros(latent_repr.size(0), 1, self.hidden_attention.in_features)).float()
             ]
         h_t = hidden_repr[0]
-        latent_att = self.latent_attention(latent_att)
+        latent_att = self.latent_attention(latent_repr)
         hidden_att = self.hidden_attention(h_t)
         joint_att = self.joint_attention(F.relu(latent_att + hidden_att)).squeeze(-1)
         attention_w = F.softmax(joint_att, dim=-1)
         return attention_w
 
-
 ##############################
 #         ConvLSTM
 ##############################
-
-
 class ConvLSTM(nn.Module):
     def __init__(
         self, num_classes, latent_dim=512, lstm_layers=1, hidden_dim=1024, bidirectional=True, attention=True
@@ -90,7 +87,7 @@ class ConvLSTM(nn.Module):
             nn.Linear(2 * hidden_dim if bidirectional else hidden_dim, hidden_dim),
             nn.BatchNorm1d(hidden_dim, momentum=0.01),
             nn.ReLU(),
-            nn.Dropout(p=0.5),  # Thêm Dropout ở đây
+            nn.Dropout(p=0.5),
             nn.Linear(hidden_dim, num_classes),
             nn.Softmax(dim=-1),
         )
@@ -110,13 +107,12 @@ class ConvLSTM(nn.Module):
             x = x[:, -1]
         return self.output_layers(x)
 
+    def reset_hidden_state(self):
+        self.lstm.reset_hidden_state()
 
 ##############################
 #     Conv2D Classifier
-#        (Baseline)
 ##############################
-
-
 class ConvClassifier(nn.Module):
     def __init__(self, num_classes, latent_dim):
         super(ConvClassifier, self).__init__()
