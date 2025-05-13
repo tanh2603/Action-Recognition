@@ -94,7 +94,7 @@ if __name__ == "__main__":
             image_sequences = Variable(X.to(device), requires_grad=False)
             labels = Variable(y, requires_grad=False).to(device)
             with torch.no_grad():
-                model.lstm.reset_hidden_state()
+                model.reset_hidden_state()
                 predictions = model(image_sequences)
             acc = 100 * (predictions.detach().argmax(1) == labels).cpu().numpy().mean()
             loss = cls_criterion(predictions, labels).item()
