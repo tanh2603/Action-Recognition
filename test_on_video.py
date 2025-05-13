@@ -38,10 +38,10 @@ if __name__ == "__main__":
     labels = sorted(list(set(os.listdir(opt.dataset_path))))
 
     # Define model and load model checkpoint
-    model = ConvLSTM(input_shape=input_shape, num_classes=len(labels), latent_dim=opt.latent_dim)
-    model.to(device)
-    model.load_state_dict(torch.load(opt.checkpoint_model))
-    model.eval()
+    model = ConvLSTM(num_classes=len(labels), latent_dim=opt.latent_dim)
+    model.to(device)  # Chuyển mô hình sang thiết bị (CPU/GPU)
+    model.load_state_dict(torch.load(opt.checkpoint_model), strict=False)
+    model.eval()  # Chuyển mô hình sang chế độ đánh giá
 
     # Extract predictions
     output_frames = []
