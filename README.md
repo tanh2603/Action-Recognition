@@ -1,8 +1,8 @@
 # Action Recognition in Video
 
-This repo will serve as a playground where I investigate different approaches to solving the problem of action recognition in video.
+Kho lưu trữ này sẽ đóng vai trò như một sân chơi nơi tôi nghiên cứu các cách tiếp cận khác nhau để giải quyết vấn đề nhận dạng hành động trong video.
 
-I will mainly use the [UCF-101 dataset](https://www.crcv.ucf.edu/data/UCF101.php).
+Tôi sẽ chủ yếu sử dụng tập dữ liệu [UCF-101 dataset](https://www.crcv.ucf.edu/data/UCF101.php).
 
 <p align="center">
     <img src="assets/crawling.gif" width="400"\>
