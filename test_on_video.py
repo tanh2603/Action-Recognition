@@ -65,3 +65,15 @@ if __name__ == "__main__":
     for frame in tqdm.tqdm(output_frames, desc="Writing to video"):
         writer.writeFrame(np.array(frame))
     writer.close()
+def predict_on_video(video_path):
+    # load mô hình ConvLSTM
+    model = torch.load("model_checkpoints/ConvLSTM_5.pth")
+    model.eval()
+
+    # xử lý video đầu vào (dùng hàm extract_frames, xử lý, dự đoán, ...)
+    # tạo video kết quả có overlay label bằng OpenCV (cv2.putText,...)
+
+    # ví dụ:
+    output_path = "result_video.mp4"
+    # ghi video đã vẽ nhãn vào output_path
+    return output_path
