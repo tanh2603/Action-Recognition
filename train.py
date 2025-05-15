@@ -162,7 +162,7 @@ def main(opt):
         # Lưu checkpoint định kỳ
         if (epoch + 1) % opt.checkpoint_interval == 0 or early_stopping.early_stop:
             os.makedirs("model_checkpoints", exist_ok=True)
-            checkpoint_path = f"model_checkpoints/{model.__class__.__name__}_epoch{epoch+1}.pth"
+            checkpoint_path = f"model_checkpoints/{model.__class__.__name__}_{epoch+1}.pth"
             torch.save({
                 'epoch': epoch,
                 'model_state_dict': model.state_dict(),
