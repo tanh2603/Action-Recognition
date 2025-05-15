@@ -90,15 +90,11 @@ class Dataset(Dataset):
         return len(self.sequences)
         
     def get_label_names(split_path="data/ucfTrainTestlist"):
-    """
-    Đọc tên các lớp hành động từ file classInd.txt.
-    Trả về: Danh sách các tên lớp theo thứ tự trong file.
-    """
-    import os
-    class_file = os.path.join(split_path, "classInd.txt")
-    label_names = []
-    with open(class_file, "r") as f:
-        for line in f:
-            _, class_name = line.strip().split()
-            label_names.append(class_name)
-    return label_names
+        import os
+        class_file = os.path.join(split_path, "classInd.txt")
+        label_names = []
+        with open(class_file, "r") as f:
+            for line in f:
+                _, class_name = line.strip().split()
+                label_names.append(class_name)
+        return label_names
