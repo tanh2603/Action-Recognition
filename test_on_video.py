@@ -1,79 +1,72 @@
-from models import *
-from dataset import *
-from data.extract_frames import extract_frames
-import argparse
 import os
-import glob
-import tqdm
-from torchvision.utils import make_grid
-from PIL import Image, ImageDraw
-import skvideo.io
+import cv2
+import torch
+import numpy as np
+from torchvision import transforms
+from models import ConvLSTM
+from dataset import get_label_names
+from PIL import Image
+
+# Thiết lập thiết bị
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+# Tham số
+class Options:
+    video_path = 'data/UCF-101/BabyCrawling/v_BabyCrawling_g01_c01.avi'
+    dataset_path = 'data/UCF-101-frames'
+    image_dim = 112
+    channels = 3
+    latent_dim = 512
+    checkpoint_model = 'model_checkpoints/ConvLSTM_5.pth'
+
+opt = Options()
+
+# Load label
+labels = get_label_names()
+
+# Load mô hình
+model = ConvLSTM(num_classes=len(labels), latent_dim=opt.latent_dim)
+model.load_state_dict(torch.load(opt.checkpoint_model, map_location=device))
+model = model.to(device)
+model.eval()
+
+# Tiền xử lý khung hình
+transform = transforms.Compose([
+    transforms.Resize((opt.image_dim, opt.image_dim)),
+    transforms.ToTensor()
+])
+
+def preprocess_video(video_path, max_frames=40):
+    cap = cv2.VideoCapture(video_path)
+    frames = []
+    total = 0
+
+    while True:
+        ret, frame = cap.read()
+        if not ret or total >= max_frames:
+            break
+        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        frame = Image.fromarray(frame)
+        frame = transform(frame)
+        frames.append(frame)
+        total += 1
+
+    cap.release()
+    # Padding nếu số lượng khung hình < max_frames
+    while len(frames) < max_frames:
+        frames.append(torch.zeros_like(frames[0]))
+
+    video_tensor = torch.stack(frames)  # [T, C, H, W]
+    video_tensor = video_tensor.unsqueeze(0).to(device)  # [1, T, C, H, W]
+    return video_tensor
+
+def predict_on_video(video_path):
+    input_tensor = preprocess_video(video_path)  # [1, T, C, H, W]
+    with torch.no_grad():
+        output = model(input_tensor)
+        prediction = torch.argmax(output, dim=1).item()
+        return labels[prediction]
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--video_path", type=str, default="data/UCF-101/BabyCrawling/v_BabyCrawling_g01_c01.avi", help="Path to video"
-    )
-    parser.add_argument("--dataset_path", type=str, default="data/UCF-101-frames", help="Path to UCF-101 dataset")
-    parser.add_argument("--image_dim", type=int, default=112, help="Height / width dimension")
-    parser.add_argument("--channels", type=int, default=3, help="Number of image channels")
-    parser.add_argument("--latent_dim", type=int, default=512, help="Dimensionality of the latent representation")
-    parser.add_argument("--checkpoint_model", type=str, default="", help="Optional path to checkpoint model")
-    opt = parser.parse_args()
-    print(opt)
-
-    assert opt.checkpoint_model, "Specify path to checkpoint model using arg. '--checkpoint_model'"
-
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    input_shape = (opt.channels, opt.image_dim, opt.image_dim)
-
-    transform = transforms.Compose(
-        [
-            transforms.Resize(input_shape[-2:], Image.BICUBIC),
-            transforms.ToTensor(),
-            transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
-        ]
-    )
-
-    labels = sorted(list(set(os.listdir(opt.dataset_path))))
-
-    # Define model and load model checkpoint
-    model = ConvLSTM(num_classes=len(labels), latent_dim=opt.latent_dim)
-    model.to(device)  # Chuyển mô hình sang thiết bị (CPU/GPU)
-    model.load_state_dict(torch.load(opt.checkpoint_model), strict=False)
-    model.eval()  # Chuyển mô hình sang chế độ đánh giá
-
-    # Extract predictions
-    output_frames = []
-    for frame in tqdm.tqdm(extract_frames(opt.video_path), desc="Processing frames"):
-        image_tensor = Variable(transform(frame)).to(device)
-        image_tensor = image_tensor.view(1, 1, *image_tensor.shape)
-
-        # Get label prediction for frame
-        with torch.no_grad():
-            prediction = model(image_tensor)
-            predicted_label = labels[prediction.argmax(1).item()]
-
-        # Draw label on frame
-        d = ImageDraw.Draw(frame)
-        d.text(xy=(10, 10), text=predicted_label, fill=(255, 255, 255))
-
-        output_frames += [frame]
-
-    # Create video from frames
-    writer = skvideo.io.FFmpegWriter("output.gif")
-    for frame in tqdm.tqdm(output_frames, desc="Writing to video"):
-        writer.writeFrame(np.array(frame))
-    writer.close()
-def predict_on_video(video_path):
-    # load mô hình ConvLSTM
-    model = torch.load("model_checkpoints/ConvLSTM_5.pth")
-    model.eval()
-
-    # xử lý video đầu vào (dùng hàm extract_frames, xử lý, dự đoán, ...)
-    # tạo video kết quả có overlay label bằng OpenCV (cv2.putText,...)
-
-    # ví dụ:
-    output_path = "result_video.mp4"
-    # ghi video đã vẽ nhãn vào output_path
-    return output_path
+    result = predict_on_video(opt.video_path)
+    print(f"Dự đoán hành động: {result}")
