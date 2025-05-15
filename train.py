@@ -36,8 +36,8 @@ def test_model(model, test_dataloader, criterion, device):
     test_metrics = {"loss": [], "acc": []}
     with torch.no_grad():
         for batch_i, (X, y) in enumerate(test_dataloader):
-            image_sequences = Variable(X.to(device), requires_grad=False)
-            labels = Variable(y.to(device), requires_grad=False)
+            image_sequences = X.to(device)
+            labels = y.to(device)
             model.reset_hidden_state()
             predictions = model(image_sequences)
             loss = criterion(predictions, labels).item()
@@ -45,7 +45,7 @@ def test_model(model, test_dataloader, criterion, device):
             test_metrics["loss"].append(loss)
             test_metrics["acc"].append(acc)
             sys.stdout.write(
-                "\rTesting -- [Batch %d/%d] [Loss: %f (%f), Acc: %.2f%% (%.2f%%)]"
+                "\rTesting -- [Batch %d/%d] [Loss: %f (%.4f), Acc: %.2f%% (%.2f%%)]"
                 % (
                     batch_i + 1,
                     len(test_dataloader),
@@ -117,12 +117,13 @@ def main(opt):
         prev_time = time.time()
         print(f"--- Epoch {epoch + 1}/{opt.num_epochs} ---")
         for batch_i, (X, y) in enumerate(train_dataloader):
+            # Bỏ qua batch size = 1 vì lỗi batchnorm/LSTM
             if X.size(0) == 1:
                 continue
-            image_sequences = Variable(X.to(device), requires_grad=True)
-            labels = Variable(y.to(device), requires_grad=False)
+            image_sequences = X.to(device)
+            labels = y.to(device)
             optimizer.zero_grad()
-            model.lstm.reset_hidden_state()
+            model.reset_hidden_state()
             predictions = model(image_sequences)
             loss = cls_criterion(predictions, labels)
             acc = 100 * (predictions.argmax(1) == labels).cpu().numpy().mean()
@@ -158,10 +159,10 @@ def main(opt):
         scheduler.step(val_loss)
         early_stopping(val_loss)
 
-        # Lưu checkpoint
+        # Lưu checkpoint định kỳ
         if (epoch + 1) % opt.checkpoint_interval == 0 or early_stopping.early_stop:
             os.makedirs("model_checkpoints", exist_ok=True)
-            checkpoint_path = f"model_checkpoints/{model.__class__.__name__}_{epoch}.pth"
+            checkpoint_path = f"model_checkpoints/{model.__class__.__name__}_epoch{epoch+1}.pth"
             torch.save({
                 'epoch': epoch,
                 'model_state_dict': model.state_dict(),
