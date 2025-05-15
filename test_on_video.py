@@ -6,6 +6,7 @@ from torchvision import transforms
 from models import ConvLSTM
 from dataset import get_label_names
 from PIL import Image
+from tqdm import tqdm  # Thêm tqdm
 
 # Thiết lập thiết bị
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -69,18 +70,19 @@ def predict_on_video(video_path):
         return labels[prediction]
 
 if __name__ == "__main__":
-    ground_truth_label = "BabyCrawling"  # Cập nhật thủ công hoặc tự động từ tên file
+    ground_truth_label = "BabyCrawling"  # Cập nhật thủ công
     predicted_label = predict_on_video(opt.video_path)
 
     print(f"Ground Truth: {ground_truth_label}")
     print(f"Prediction   : {predicted_label}")
     print(f"Result       : {'Correct ✅' if predicted_label == ground_truth_label else 'Incorrect ❌'}")
 
-    # Hiển thị video + overlay kết quả
+    # Hiển thị video với overlay và thanh tiến trình
     cap = cv2.VideoCapture(opt.video_path)
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     font = cv2.FONT_HERSHEY_SIMPLEX
 
-    while True:
+    for _ in tqdm(range(total_frames), desc="Đang phát video", unit="frame"):
         ret, frame = cap.read()
         if not ret:
             break
