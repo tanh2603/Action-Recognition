@@ -89,12 +89,12 @@ class Dataset(Dataset):
     def __len__(self):
         return len(self.sequences)
         
-    def get_label_names(split_path="data/ucfTrainTestlist"):
-        import os
-        class_file = os.path.join(split_path, "classInd.txt")
-        label_names = []
-        with open(class_file, "r") as f:
-            for line in f:
-                _, class_name = line.strip().split()
-                label_names.append(class_name)
-        return label_names
+def get_label_names(split_path="data/ucfTrainTestlist"):
+    import os
+    class_file = os.path.join(split_path, "classInd.txt")
+    label_names = []
+    with open(class_file, "r") as f:
+        for line in f:
+            _, class_name = line.strip().split()
+            label_names.append(class_name)
+    return label_names
