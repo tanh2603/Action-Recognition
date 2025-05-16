@@ -5,9 +5,14 @@ import argparse
 import os
 import glob
 import tqdm
+from torchvision import transforms
 from torchvision.utils import make_grid
 from PIL import Image, ImageDraw
 import skvideo.io
+import torch
+from torch.autograd import Variable
+import numpy as np
+import collections
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -35,33 +40,55 @@ if __name__ == "__main__":
         ]
     )
 
+    # Lấy danh sách nhãn từ thư mục dataset_path (tên các thư mục con)
     labels = sorted(list(set(os.listdir(opt.dataset_path))))
 
-    # Define model and load model checkpoint
-    model = ConvLSTM(num_classes=len(labels), latent_dim=opt.latent_dim)
-    model.to(device)  # Chuyển mô hình sang thiết bị (CPU/GPU)
-    model.load_state_dict(torch.load(opt.checkpoint_model), strict=False)
-    model.eval()  # Chuyển mô hình sang chế độ đánh giá
+    # Khởi tạo model và load checkpoint
+    model = ConvLSTM(num_classes=101, latent_dim=opt.latent_dim)
+    model.to(device)
+    model.load_state_dict(torch.load(opt.checkpoint_model, map_location=torch.device('cpu')))
+    model.eval()
 
-    # Extract predictions
+    # Lấy nhãn thật của video từ thư mục chứa video
+    true_label = os.path.basename(os.path.dirname(opt.video_path))
+    print(f"True label (ground truth): {true_label}")
+
+    predicted_labels = []
     output_frames = []
+
     for frame in tqdm.tqdm(extract_frames(opt.video_path), desc="Processing frames"):
         image_tensor = Variable(transform(frame)).to(device)
-        image_tensor = image_tensor.view(1, 1, *image_tensor.shape)
+        image_tensor = image_tensor.view(1, 1, *image_tensor.shape)  # shape (batch=1, seq_len=1, c, h, w)
 
-        # Get label prediction for frame
         with torch.no_grad():
             prediction = model(image_tensor)
             predicted_label = labels[prediction.argmax(1).item()]
+            predicted_labels.append(predicted_label)
 
-        # Draw label on frame
+        # Vẽ nhãn dự đoán lên frame
         d = ImageDraw.Draw(frame)
-        d.text(xy=(10, 10), text=predicted_label, fill=(255, 255, 255))
+        d.text(xy=(10, 10), text=f"Predicted: {predicted_label}", fill=(255, 255, 255))
+        output_frames.append(frame)
 
-        output_frames += [frame]
+    # Tính nhãn dự đoán video dựa trên nhãn frame xuất hiện nhiều nhất
+    most_common_label = collections.Counter(predicted_labels).most_common(1)[0][0]
 
-    # Create video from frames
-    writer = skvideo.io.FFmpegWriter("output.gif")
-    for frame in tqdm.tqdm(output_frames, desc="Writing to video"):
-        writer.writeFrame(np.array(frame))
-    writer.close()
+    # Tính accuracy video-level (1 nếu đúng, 0 nếu sai)
+    accuracy = 1.0 if most_common_label == true_label else 0.0
+
+    print(f"Predicted label (video-level): {most_common_label}")
+    print(f"Accuracy: {accuracy:.4f}")
+
+    # Ghi accuracy lên tất cả các frame
+    for frame in output_frames:
+        d = ImageDraw.Draw(frame)
+        d.text(xy=(10, 30), text=f"Accuracy: {accuracy * 100:.0f}%", fill=(255, 255, 255))
+
+    # Tạo GIF đầu ra bằng Pillow
+    output_frames[0].save(
+        "output.gif",
+        save_all=True,
+        append_images=output_frames[1:], 
+        duration=40,      # thời gian hiển thị mỗi frame (ms)
+        loop=0            # lặp vô hạn
+    )
