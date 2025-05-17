@@ -1,15 +1,18 @@
-import torch
-import torch.optim as optim
+
+import os
 import sys
-import numpy as np
-import itertools
-from models import *
-from dataset import *
-from torch.utils.data import DataLoader
-from torch.autograd import Variable
-import argparse
 import time
 import datetime
+import argparse
+import numpy as np
+import torch
+import torch.nn as nn
+import torch.optim as optim
+from torch.utils.data import DataLoader
+from torch.autograd import Variable
+
+from models import *
+from dataset import *
 
 class EarlyStopping:
     def __init__(self, patience=7, min_delta=1e-4):
@@ -28,19 +31,48 @@ class EarlyStopping:
             if self.counter >= self.patience:
                 self.early_stop = True
 
-if __name__ == "__main__":
+def test_model(model, test_dataloader, cls_criterion, device, epoch):
+    print("")
+    model.eval()
+    test_metrics = {"loss": [], "acc": []}
+    for batch_i, (X, y) in enumerate(test_dataloader):
+        image_sequences = Variable(X.to(device), requires_grad=False)
+        labels = Variable(y, requires_grad=False).to(device)
+        with torch.no_grad():
+            model.lstm.reset_hidden_state()
+            predictions = model(image_sequences)
+        acc = 100 * (predictions.detach().argmax(1) == labels).cpu().numpy().mean()
+        loss = cls_criterion(predictions, labels).item()
+        test_metrics["loss"].append(loss)
+        test_metrics["acc"].append(acc)
+        sys.stdout.write(
+            "\rTesting -- [Batch %d/%d] [Loss: %f (%f), Acc: %.2f%% (%.2f%%)]"
+            % (
+                batch_i,
+                len(test_dataloader),
+                loss,
+                np.mean(test_metrics["loss"]),
+                acc,
+                np.mean(test_metrics["acc"]),
+            )
+        )
+    print("")
+    model.train()
+    return np.mean(test_metrics["loss"])
+
+def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--dataset_path", type=str, default="data/UCF-101-frames", help="Path to UCF-101 dataset")
-    parser.add_argument("--split_path", type=str, default="data/ucfTrainTestlist", help="Path to train/test split")
-    parser.add_argument("--split_number", type=int, default=1, help="train/test split number. One of {1, 2, 3}")
-    parser.add_argument("--num_epochs", type=int, default=100, help="Number of training epochs")
-    parser.add_argument("--batch_size", type=int, default=16, help="Size of each training batch")
-    parser.add_argument("--sequence_length", type=int, default=40, help="Number of frames in each sequence")
-    parser.add_argument("--img_dim", type=int, default=224, help="Height / width dimension")
-    parser.add_argument("--channels", type=int, default=3, help="Number of image channels")
-    parser.add_argument("--latent_dim", type=int, default=512, help="Dimensionality of the latent representation")
-    parser.add_argument("--checkpoint_model", type=str, default="", help="Optional path to checkpoint model")
-    parser.add_argument("--checkpoint_interval", type=int, default=5, help="Interval between saving model checkpoints")
+    parser.add_argument("--dataset_path", type=str, default="data/UCF-101-frames")
+    parser.add_argument("--split_path", type=str, default="data/ucfTrainTestlist")
+    parser.add_argument("--split_number", type=int, default=1)
+    parser.add_argument("--num_epochs", type=int, default=100)
+    parser.add_argument("--batch_size", type=int, default=16)
+    parser.add_argument("--sequence_length", type=int, default=40)
+    parser.add_argument("--img_dim", type=int, default=224)
+    parser.add_argument("--channels", type=int, default=3)
+    parser.add_argument("--latent_dim", type=int, default=512)
+    parser.add_argument("--checkpoint_model", type=str, default="")
+    parser.add_argument("--checkpoint_interval", type=int, default=5)
     opt = parser.parse_args()
     print(opt)
 
@@ -76,44 +108,14 @@ if __name__ == "__main__":
         hidden_dim=1024,
         bidirectional=True,
         attention=True,
-    )
-    model = model.to(device)
+    ).to(device)
 
     if opt.checkpoint_model:
         model.load_state_dict(torch.load(opt.checkpoint_model))
 
     optimizer = optim.AdamW(model.parameters(), lr=1e-4, weight_decay=1e-2)
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=3, verbose=True)
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=3)
     early_stopping = EarlyStopping(patience=7, min_delta=1e-4)
-
-    def test_model(epoch):
-        print("")
-        model.eval()
-        test_metrics = {"loss": [], "acc": []}
-        for batch_i, (X, y) in enumerate(test_dataloader):
-            image_sequences = Variable(X.to(device), requires_grad=False)
-            labels = Variable(y, requires_grad=False).to(device)
-            with torch.no_grad():
-                model.lstm.reset_hidden_state()
-                predictions = model(image_sequences)
-            acc = 100 * (predictions.detach().argmax(1) == labels).cpu().numpy().mean()
-            loss = cls_criterion(predictions, labels).item()
-            test_metrics["loss"].append(loss)
-            test_metrics["acc"].append(acc)
-            sys.stdout.write(
-                "\rTesting -- [Batch %d/%d] [Loss: %f (%f), Acc: %.2f%% (%.2f%%)]"
-                % (
-                    batch_i,
-                    len(test_dataloader),
-                    loss,
-                    np.mean(test_metrics["loss"]),
-                    acc,
-                    np.mean(test_metrics["acc"]),
-                )
-            )
-        print("")
-        model.train()
-        return np.mean(test_metrics["loss"])
 
     for epoch in range(opt.num_epochs):
         epoch_metrics = {"loss": [], "acc": []}
@@ -154,7 +156,7 @@ if __name__ == "__main__":
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
 
-        val_loss = test_model(epoch)
+        val_loss = test_model(model, test_dataloader, cls_criterion, device, epoch)
         scheduler.step(val_loss)
         early_stopping(val_loss)
 
@@ -165,3 +167,6 @@ if __name__ == "__main__":
         if early_stopping.early_stop:
             print(f"\nEarly stopping triggered at epoch {epoch}")
             break
+
+if __name__ == "__main__":
+    main()
