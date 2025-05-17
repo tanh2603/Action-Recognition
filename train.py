@@ -1,3 +1,4 @@
+Train.py
 
 import os
 import sys
@@ -77,6 +78,7 @@ def main():
     print(opt)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    torch.backends.cudnn.benchmark = True
     image_shape = (opt.channels, opt.img_dim, opt.img_dim)
 
     train_dataset = Dataset(
@@ -117,10 +119,10 @@ def main():
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=3)
     early_stopping = EarlyStopping(patience=7, min_delta=1e-4)
 
-    for epoch in range(opt.num_epochs):
+    for epoch in range(1, opt.num_epochs + 1):
         epoch_metrics = {"loss": [], "acc": []}
         prev_time = time.time()
-        print(f"--- Epoch {epoch} ---")
+        print(f"--- Epoch {epoch} —“)
         for batch_i, (X, y) in enumerate(train_dataloader):
             if X.size(0) == 1:
                 continue
@@ -161,8 +163,10 @@ def main():
         early_stopping(val_loss)
 
         if epoch % opt.checkpoint_interval == 0:
-            os.makedirs("model_checkpoints", exist_ok=True)
-            torch.save(model.state_dict(), f"model_checkpoints/{model.__class__.__name__}_{epoch}.pth")
+   		os.makedirs("model_checkpoints", exist_ok=True)
+    		ckpt_path = f"model_checkpoints/{model.__class__.__name__}_{epoch}.pth"
+    		torch.save(model.state_dict(), ckpt_path)
+    		print(f"\nSaved checkpoint: {ckpt_path}")
 
         if early_stopping.early_stop:
             print(f"\nEarly stopping triggered at epoch {epoch}")
